@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Weathere • System Status</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    >
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+        body {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background: radial-gradient(circle at top, #4a69bd, #1e272e);
+            color: #1d1d1f;
+        }
+        .admin-container {
+            width: 100%;
+            max-width: 600px;
+            background: rgba(255, 255, 255, 0.97);
+            border-radius: 20px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
+            overflow: hidden;
+        }
+        .admin-header {
+            padding: 20px 24px;
+            background: linear-gradient(to right, #4a69bd, #6a89cc);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .admin-header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .admin-header-title i {
+            font-size: 24px;
+        }
+        .admin-header-title h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .admin-header-subtitle {
+            font-size: 13px;
+            opacity: 0.9;
+            margin-top: 4px;
+        }
+        .admin-body {
+            padding: 24px;
+        }
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #34495e;
+        }
+        .section-title i {
+            color: #4a69bd;
+        }
+        .status-card {
+            padding: 12px 12px;
+            border-radius: 12px;
+            background: #f4f6fb;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .status-icon {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .status-icon.off {
+            background: #e74c3c;
+        }
+        .status-icon.on {
+            background: #2ecc71;
+        }
+        .status-text {
+            font-size: 13px;
+        }
+        .status-label {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .status-value {
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+        .hint {
+            font-size: 13px;
+            color: #7f8c8d;
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+        .hint code {
+            background: #f0f0f0;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .footer {
+            padding: 16px 20px;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+            font-size: 12px;
+            color: #7f8c8d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .footer a {
+            color: #4a69bd;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        .btn {
+            padding: 8px 14px;
+            border-radius: 10px;
+            border: none;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            justify-content: center;
+            background: linear-gradient(to right, #4a69bd, #6a89cc);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+<div class="admin-container">
+    <div class="admin-header">
+        <div class="admin-header-title">
+            <i class="fas fa-server"></i>
+            <div>
+                <h1>Weathere System Status</h1>
+                <div class="admin-header-subtitle">
+                    Check connection to the backend API, database, and AI services.
+                </div>
+            </div>
+        </div>
+        <button class="btn" id="refresh-btn">
+            <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+    </div>
+    <div class="admin-body">
+        <div class="section-title">
+            <i class="fas fa-plug"></i>
+            <span>Backend connectivity</span>
+        </div>
+        <div class="status-card">
+            <div id="apiStatusDot" class="status-icon off"></div>
+            <div class="status-text">
+                <div class="status-label">API server</div>
+                <div id="apiStatusText" class="status-value">Not checked</div>
+            </div>
+        </div>
+        <div class="status-card">
+            <div id="dbStatusDot" class="status-icon off"></div>
+            <div class="status-text">
+                <div class="status-label">Database & AI</div>
+                <div id="dbStatusText" class="status-value">Not checked</div>
+            </div>
+        </div>
+        <p class="hint">
+            The user-facing app does not require any configuration. As long as the backend server is running with a valid
+            <code>MONGODB_URI</code> and (optionally) <code>OPENAI_API_KEY</code> in its <code>.env</code>, the feedback
+            and AI sentiment analysis will work automatically.
+        </p>
+    </div>
+    <div class="footer">
+        <span>Weathere • Status Panel</span>
+        <a href="./index.html">Back to app</a>
+    </div>
+</div>
+<script>
+  window.WEATHERE_API_BASE_URL = "http://localhost:4000";
+</script>
+<script>
+    const API_BASE = window.WEATHERE_API_BASE_URL || "http://localhost:4000";
+
+    const apiStatusDot = document.getElementById("apiStatusDot");
+    const apiStatusText = document.getElementById("apiStatusText");
+    const dbStatusDot = document.getElementById("dbStatusDot");
+    const dbStatusText = document.getElementById("dbStatusText");
+    const refreshBtn = document.getElementById("refresh-btn");
+
+    function setStatus(dot, textEl, ok, message) {
+        dot.className = "status-icon " + (ok ? "on" : "off");
+        textEl.textContent = message;
+    }
+
+    async function checkStatus() {
+        try {
+            const res = await fetch(API_BASE + "/api/health");
+            if (!res.ok) {
+                setStatus(apiStatusDot, apiStatusText, false, "API unreachable (" + res.status + ")");
+                setStatus(dbStatusDot, dbStatusText, false, "Unknown (API call failed)");
+                return;
+            }
+            const data = await res.json();
+            setStatus(apiStatusDot, apiStatusText, true, "API reachable");
+            if (data.mongoConnected) {
+                setStatus(dbStatusDot, dbStatusText, true, "MongoDB connected" + (data.aiConfigured ? " • AI configured" : " • AI not configured"));
+            } else {
+                setStatus(dbStatusDot, dbStatusText, false, "MongoDB not connected");
+            }
+        } catch (e) {
+            setStatus(apiStatusDot, apiStatusText, false, "API unreachable");
+            setStatus(dbStatusDot, dbStatusText, false, "Unknown (network error)");
+        }
+    }
+
+    refreshBtn.addEventListener("click", checkStatus);
+    window.addEventListener("DOMContentLoaded", checkStatus);
+</script>
+</body>
+</html>
