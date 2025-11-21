@@ -342,79 +342,103 @@ app.get("/api/feedback/summary", async (req, res) => {
     let summaryText = summaryDoc ? summaryDoc.summaryText : null;
 
     if (!summaryText && totalFeedback > 0) {
-      if (!OPENAI_API_KEY) {
-        summaryText = `Local estimate based on ${totalFeedback} feedback entries: ` +
-          `${likes} like(s) and ${dislikes} dislike(s).`;
-      } else {
-        const comments = feedbackDocs.map(f => f.commentText).filter(Boolean);
-        if (comments.length > 0) {
-          const prompt = `
+  // Cheap spam / nonsense filter
+  const rawComments = feedbackDocs
+    .map(f => (f.commentText || "").trim())
+    .filter(Boolean);
+
+  const meaningfulComments = rawComments.filter(c =>
+    c.length >= 10 && /[a-zA-Z]/.test(c) // at least 10 chars and contains letters
+  );
+
+  const MIN_MEANINGFUL_COMMENTS = 3;
+  const MIN_UNIQUE_USERS_FOR_AI = 2;
+
+  // If no AI key, or data is too thin / unreliable, fall back to a deterministic summary
+  if (
+    !OPENAI_API_KEY ||
+    meaningfulComments.length < MIN_MEANINGFUL_COMMENTS ||
+    uniqueUsers < MIN_UNIQUE_USERS_FOR_AI
+  ) {
+    summaryText =
+      `Based on ${totalFeedback} feedback entr${totalFeedback === 1 ? "y" : "ies"} so far, ` +
+      `${likes} like(s) and ${dislikes} dislike(s) have been recorded for this hour. ` +
+      `There is not yet enough consistent commentary from multiple users to generate an AI summary.`;
+  } else {
+    // Robust prompt that includes stats + filtered comments
+    const prompt = `
 You are analyzing user comments about how accurate the current weather forecast is.
 
 Location: ${location.name}
 Forecast time (normalized hour): ${normalizedForecastTime.toISOString()}
 
-User comments:
-${comments.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+Stats:
+- Total feedback entries: ${totalFeedback}
+- Likes (forecast accurate): ${likes}
+- Dislikes (forecast inaccurate): ${dislikes}
+- Unique users: ${uniqueUsers}
+
+User comments (only a sample of meaningful ones):
+${meaningfulComments.map((c, i) => `${i + 1}. ${c}`).join("\\n")}
 
 Task:
 Provide a concise 2–3 sentence summary that:
 - describes how accurate the forecast seems compared to real conditions,
-- states the overall sentiment (positive, mixed, or negative),
-- notes any common issues users mention.
+- clearly states the overall sentiment (positive, mixed, or negative),
+- notes any recurring issues users mention (e.g. wrong temperature, wrong precipitation, timing off),
+- and mentions when the sample size is small or feedback is sparse, instead of overgeneralizing.
 
 Respond as plain text with no bullet points.
-          `.trim();
+    `.trim();
 
-          try {
-            const response = await fetch("https://api.openai.com/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                "Authorization": "Bearer " + OPENAI_API_KEY,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + OPENAI_API_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          messages: [
+            { role: "system", content: "You summarize weather forecast accuracy based on user comments and basic statistics." },
+            { role: "user", content: prompt }
+          ],
+          max_tokens: 220
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const aiText = data.choices?.[0]?.message?.content?.trim();
+        if (aiText) {
+          summaryText = aiText;
+          summaryDoc = await AISummary.findOneAndUpdate(
+            {
+              locationId: location._id,
+              forecastTime: normalizedForecastTime,
+              window: "hour"
+            },
+            {
+              $set: {
+                summaryText: aiText,
+                stats: { totalFeedback, likes, dislikes, uniqueUsers },
                 model: OPENAI_MODEL,
-                messages: [
-                  { role: "system", content: "You summarize weather forecast accuracy based on user comments." },
-                  { role: "user", content: prompt }
-                ],
-                max_tokens: 220
-              })
-            });
-
-            if (response.ok) {
-              const data = await response.json();
-              const aiText = data.choices?.[0]?.message?.content?.trim();
-              if (aiText) {
-                summaryText = aiText;
-                summaryDoc = await AISummary.findOneAndUpdate(
-                  {
-                    locationId: location._id,
-                    forecastTime: normalizedForecastTime,
-                    window: "hour"
-                  },
-                  {
-                    $set: {
-                      summaryText: aiText,
-                      stats: { totalFeedback, likes, dislikes, uniqueUsers },
-                      model: OPENAI_MODEL,
-                      generatedAt: new Date()
-                    }
-                  },
-                  { new: true, upsert: true }
-                );
+                generatedAt: new Date()
               }
-            } else {
-              const err = await response.json().catch(() => ({}));
-              console.error("OpenAI error:", err);
-            }
-          } catch (e) {
-            console.error("OpenAI request failed:", e);
-          }
+            },
+            { new: true, upsert: true }
+          );
         }
+      } else {
+        const err = await response.json().catch(() => ({}));
+        console.error("OpenAI error:", err);
       }
+    } catch (e) {
+      console.error("OpenAI request failed:", e);
     }
+  }
+}
 
     const comments = feedbackDocs.map(f => ({
       id: f._id,
