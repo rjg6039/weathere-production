@@ -3,7 +3,10 @@
 // comparison, and patterns. Favorites are tied to account when logged in,
 // and fall back to localStorage when anonymous.
 
-const API_BASE = window.WEATHERE_API_BASE_URL || "http://localhost:4000";
+// Helper to access backend base URL without redeclaring API_BASE
+function getApiBase() {
+    return window.WEATHERE_API_BASE_URL || "http://localhost:4000";
+}
 
 window.currentLocationData = window.currentLocationData || {
     display_name: "San Francisco, CA, USA",
@@ -80,7 +83,7 @@ async function loadFavoritesFromAccount() {
     }
 
     try {
-        const res = await fetch(API_BASE + "/api/user/favorites", {
+        const res = await fetch(getApiBase() + "/api/user/favorites", {
             headers: {
                 "Authorization": "Bearer " + token
             }
@@ -529,7 +532,7 @@ async function toggleFavoriteForCurrentLocation() {
     if (token) {
         // Logged-in: update favorites on the server
         try {
-            const res = await fetch(API_BASE + "/api/user/favorites/toggle", {
+            const res = await fetch(getApiBase() + "/api/user/favorites/toggle", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
