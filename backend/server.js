@@ -37,7 +37,18 @@ const userSchema = new mongoose.Schema(
   {
     email: { type: String, required: true, unique: true },
     passwordHash: { type: String, required: true },
-    displayName: { type: String, required: true }
+    displayName: { type: String, required: true },
+
+    // Favorites tied to this account
+    favorites: [
+      {
+        locationId: { type: mongoose.Schema.Types.ObjectId, ref: "Location" },
+        name: String,
+        latitude: Number,
+        longitude: Number,
+        timezone: String
+      }
+    ]
   },
   { timestamps: true }
 );
@@ -462,4 +473,91 @@ Respond as plain text with no bullet points.
 
 app.listen(PORT, () => {
   console.log(`Weathere backend listening on port ${PORT}`);
+});
+
+// Get favorites for the current user
+app.get("/api/user/favorites", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).populate("favorites.locationId");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const favorites = (user.favorites || []).map(f => {
+      const locDoc = f.locationId;
+      return {
+        id: locDoc?._id || null,
+        name: f.name || locDoc?.name,
+        latitude: f.latitude ?? locDoc?.latitude,
+        longitude: f.longitude ?? locDoc?.longitude,
+        timezone: f.timezone ?? locDoc?.timezone
+      };
+    });
+
+    res.json({ favorites });
+  } catch (err) {
+    console.error("get favorites error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Toggle favorite for current location (add/remove)
+app.post("/api/user/favorites/toggle", authMiddleware, async (req, res) => {
+  try {
+    const { locationName, latitude, longitude, timezone } = req.body;
+    if (!locationName) {
+      return res.status(400).json({ error: "locationName is required" });
+    }
+
+    // Normalize location through the Location collection
+    const location = await getOrCreateLocation({
+      name: locationName,
+      latitude,
+      longitude,
+      timezone
+    });
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (!user.favorites) user.favorites = [];
+
+    const existingIndex = user.favorites.findIndex(
+      (f) => String(f.locationId) === String(location._id)
+    );
+
+    let isFavorite;
+    if (existingIndex >= 0) {
+      // Remove from favorites
+      user.favorites.splice(existingIndex, 1);
+      isFavorite = false;
+    } else {
+      // Add to favorites
+      user.favorites.push({
+        locationId: location._id,
+        name: location.name,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        timezone: location.timezone
+      });
+      isFavorite = true;
+    }
+
+    await user.save();
+
+    const favorites = (user.favorites || []).map(f => ({
+      id: f.locationId,
+      name: f.name,
+      latitude: f.latitude,
+      longitude: f.longitude,
+      timezone: f.timezone
+    }));
+
+    res.json({ favorites, isFavorite });
+  } catch (err) {
+    console.error("toggle favorites error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
