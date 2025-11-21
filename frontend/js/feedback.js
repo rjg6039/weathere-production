@@ -1,5 +1,6 @@
 // feedback.js
-// Handles user auth, feedback submission, and fetching stats + AI summaries from backend.
+// Handles user auth, feedback submission, fetching stats and AI summaries,
+// and exposes auth state so weather-core.js can sync account favorites.
 
 const API_BASE = window.WEATHERE_API_BASE_URL || "http://localhost:4000";
 
@@ -41,11 +42,13 @@ function updateAuthUI() {
         authBtn.innerHTML = '<i class="fas fa-user-check"></i> ' + (currentUser.displayName || "Signed in");
         if (authMsg) {
             authMsg.textContent = "Signed in as " + (currentUser.email || currentUser.displayName);
+            authMsg.style.color = "#555";
         }
     } else {
         authBtn.innerHTML = '<i class="fas fa-user"></i> Sign in';
         if (authMsg) {
             authMsg.textContent = "You must sign in to submit feedback.";
+            authMsg.style.color = "#555";
         }
     }
 }
@@ -97,6 +100,17 @@ async function registerUser() {
         msg.textContent = "Registered and signed in.";
         msg.style.color = "#27ae60";
         updateAuthUI();
+
+        // Expose auth state globally
+        window.weathereAuth = {
+            isLoggedIn: true,
+            token: currentUser.token,
+            displayName: currentUser.displayName,
+            email: currentUser.email
+        };
+        if (typeof window.syncFavoritesFromAccount === "function") {
+            window.syncFavoritesFromAccount();
+        }
     } catch (e) {
         console.error(e);
         msg.textContent = "Network error during registration.";
@@ -143,6 +157,17 @@ async function loginUser() {
         msg.textContent = "Signed in.";
         msg.style.color = "#27ae60";
         updateAuthUI();
+
+        // Expose auth state globally
+        window.weathereAuth = {
+            isLoggedIn: true,
+            token: currentUser.token,
+            displayName: currentUser.displayName,
+            email: currentUser.email
+        };
+        if (typeof window.syncFavoritesFromAccount === "function") {
+            window.syncFavoritesFromAccount();
+        }
     } catch (e) {
         console.error(e);
         msg.textContent = "Network error during login.";
@@ -248,7 +273,7 @@ function renderFeedbackFromServer(data) {
 
     if (!likesEl || !dislikesEl || !accEl || !commentsList || !aiSummaryEl) return;
 
-    const stats = data.stats || { likes: 0, dislikes: 0, totalFeedback: 0 };
+    const stats = data.stats || { likes: 0, dislikes: 0, totalFeedback: 0, uniqueUsers: 0 };
     likesEl.textContent = stats.likes || 0;
     dislikesEl.textContent = stats.dislikes || 0;
 
@@ -318,10 +343,27 @@ function registerFeedbackHandlers() {
     }
 }
 
+// Expose refresh function so weather-core.js can call it after weather loads
 window.refreshFeedbackFromServer = refreshFeedbackFromServer;
+
+// -------- Init --------
 
 window.addEventListener("DOMContentLoaded", () => {
     loadUserFromStorage();
+
+    // Expose auth state globally at startup
+    window.weathereAuth = {
+        isLoggedIn: !!(currentUser && currentUser.id && currentUser.token),
+        token: currentUser?.token || null,
+        displayName: currentUser?.displayName || null,
+        email: currentUser?.email || null
+    };
+
     updateAuthUI();
     registerFeedbackHandlers();
+
+    // If logged in, sync favorites from account
+    if (window.weathereAuth.isLoggedIn && typeof window.syncFavoritesFromAccount === "function") {
+        window.syncFavoritesFromAccount();
+    }
 });
