@@ -290,7 +290,7 @@ function renderFeedbackFromServer(data) {
         aiSummaryEl.textContent = data.aiSummary;
     } else {
         aiSummaryEl.textContent =
-            "AI analysis will summarize how accurate the forecast seems once enough feedback is available and the backend has an OpenAI API key configured.";
+            "No AI analysis yet. Once there are enough real user comments for this location and hour, the system will generate a summary based on stored feedback.";
     }
 }
 
