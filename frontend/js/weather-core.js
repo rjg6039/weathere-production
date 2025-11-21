@@ -1,5 +1,9 @@
 // weather-core.js
-// Handles location search, weather fetching (Open-Meteo), tabs, favorites, comparison, and patterns.
+// Handles location search, weather fetching (Open-Meteo), tabs, favorites,
+// comparison, and patterns. Favorites are tied to account when logged in,
+// and fall back to localStorage when anonymous.
+
+const API_BASE = window.WEATHERE_API_BASE_URL || "http://localhost:4000";
 
 window.currentLocationData = window.currentLocationData || {
     display_name: "San Francisco, CA, USA",
@@ -11,6 +15,7 @@ let currentWeatherData = null;
 
 const FAVORITES_STORAGE_KEY = "weathere_favorites";
 
+// Default demo favorites for anonymous/first-time users
 let favorites = [
     {
         display_name: "San Francisco, CA, USA",
@@ -29,7 +34,23 @@ let favorites = [
     }
 ];
 
-function loadFavorites() {
+// Shared auth state (managed by feedback.js)
+window.weathereAuth = window.weathereAuth || {
+    isLoggedIn: false,
+    token: null,
+    displayName: null,
+    email: null
+};
+
+function getAuthToken() {
+    return window.weathereAuth && window.weathereAuth.isLoggedIn
+        ? window.weathereAuth.token
+        : null;
+}
+
+// -------- Favorites: local (anonymous) --------
+
+function loadFavoritesLocal() {
     try {
         const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
         if (!raw) return;
@@ -42,13 +63,61 @@ function loadFavorites() {
     }
 }
 
-function saveFavorites() {
+function saveFavoritesLocal() {
     try {
         localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
     } catch (e) {
         console.error("Failed to save favorites:", e);
     }
 }
+
+// -------- Favorites: account-based (server) --------
+
+async function loadFavoritesFromAccount() {
+    const token = getAuthToken();
+    if (!token) {
+        return;
+    }
+
+    try {
+        const res = await fetch(API_BASE + "/api/user/favorites", {
+            headers: {
+                "Authorization": "Bearer " + token
+            }
+        });
+        if (!res.ok) {
+            console.error("Failed to load account favorites:", res.status);
+            return;
+        }
+        const data = await res.json();
+        const serverFavorites = (data.favorites || []).map(f => ({
+            display_name: f.name,
+            lat: String(f.latitude),
+            lon: String(f.longitude),
+            timezone: f.timezone || "auto"
+        }));
+        if (serverFavorites.length) {
+            favorites = serverFavorites;
+            renderFavorites();
+            updateFavoriteToggle();
+        }
+    } catch (e) {
+        console.error("Error loading account favorites:", e);
+    }
+}
+
+// Hook for feedback.js to trigger sync when auth changes
+window.syncFavoritesFromAccount = async function () {
+    const token = getAuthToken();
+    if (!token) {
+        // Logged out → revert to local favorites
+        loadFavoritesLocal();
+        renderFavorites();
+        updateFavoriteToggle();
+        return;
+    }
+    await loadFavoritesFromAccount();
+};
 
 function isCurrentLocationFavorite() {
     if (!window.currentLocationData) return false;
@@ -67,8 +136,11 @@ function updateFavoriteToggle() {
     }
 }
 
+// -------- General UI helpers --------
+
 function setCurrentDate() {
     const dateEl = document.getElementById("current-date");
+    if (!dateEl) return;
     const now = new Date();
     const options = { weekday: "long", month: "long", day: "numeric", year: "numeric" };
     dateEl.textContent = now.toLocaleDateString(undefined, options);
@@ -93,6 +165,8 @@ async function geocodeLocation(query) {
 
 async function fetchWeatherForLocation(loc) {
     const content = document.getElementById("weather-content");
+    if (!content) return;
+
     content.innerHTML = `
         <div class="loading">
             <div class="spinner" aria-hidden="true"></div>
@@ -148,13 +222,13 @@ function weatherCodeToIcon(code) {
     if (code === null || typeof code === "undefined") return '<i class="fas fa-question-circle"></i>';
     const n = Number(code);
     if (n === 0) return '<i class="fas fa-sun"></i>';
-    if ([1,2].includes(n)) return '<i class="fas fa-cloud-sun"></i>';
+    if ([1, 2].includes(n)) return '<i class="fas fa-cloud-sun"></i>';
     if (n === 3) return '<i class="fas fa-cloud"></i>';
-    if ([45,48].includes(n)) return '<i class="fas fa-smog"></i>';
-    if ([51,53,55,56,57,61,63,65].includes(n)) return '<i class="fas fa-cloud-showers-heavy"></i>';
-    if ([71,73,75,77].includes(n)) return '<i class="fas fa-snowflake"></i>';
-    if ([80,81,82].includes(n)) return '<i class="fas fa-cloud-showers-water"></i>';
-    if ([95,96,99].includes(n)) return '<i class="fas fa-bolt"></i>';
+    if ([45, 48].includes(n)) return '<i class="fas fa-smog"></i>';
+    if ([51, 53, 55, 56, 57, 61, 63, 65].includes(n)) return '<i class="fas fa-cloud-showers-heavy"></i>';
+    if ([71, 73, 75, 77].includes(n)) return '<i class="fas fa-snowflake"></i>';
+    if ([80, 81, 82].includes(n)) return '<i class="fas fa-cloud-showers-water"></i>';
+    if ([95, 96, 99].includes(n)) return '<i class="fas fa-bolt"></i>';
     return '<i class="fas fa-cloud"></i>';
 }
 
@@ -163,15 +237,17 @@ function updateBodyBackgroundFromWeather(data) {
     const code = Number(data.current_weather.weathercode);
     let cls = "clear-sky";
     if (code === 0) cls = "clear-sky";
-    else if ([1,2,3].includes(code)) cls = "few-clouds";
-    else if ([45,48].includes(code)) cls = "mist";
-    else if ([51,53,55,61,63,65,80,81,82].includes(code)) cls = "rain";
-    else if ([71,73,75,77,85,86].includes(code)) cls = "snow";
+    else if ([1, 2, 3].includes(code)) cls = "few-clouds";
+    else if ([45, 48].includes(code)) cls = "mist";
+    else if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) cls = "rain";
+    else if ([71, 73, 75, 77, 85, 86].includes(code)) cls = "snow";
     document.body.className = cls;
 }
 
 function renderWeather() {
     const content = document.getElementById("weather-content");
+    if (!content) return;
+
     if (!currentWeatherData) {
         content.innerHTML = `<div class="loading">No weather data yet.</div>`;
         return;
@@ -193,12 +269,12 @@ function renderWeather() {
             <div class="weather-details">
                 <div class="detail">
                     <i class="fas fa-wind"></i>
-                    <div class="detail-value">${wind != null ? Math.round(wind) + ' mph' : '--'}</div>
+                    <div class="detail-value">${wind != null ? Math.round(wind) + " mph" : "--"}</div>
                     <div class="detail-label">Wind</div>
                 </div>
                 <div class="detail">
                     <i class="fas fa-clock"></i>
-                    <div class="detail-value">${new Date(current.time || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+                    <div class="detail-value">${new Date(current.time || Date.now()).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}</div>
                     <div class="detail-label">Observed</div>
                 </div>
             </div>
@@ -284,7 +360,7 @@ function renderHourlyForecast() {
                 <div class="forecast-label">${label}</div>
                 <div class="forecast-icon">${icon}</div>
                 <div class="forecast-temp">
-                    ${Math.round(temp)}&deg;${precip != null ? ' · ' + precip + '% rain' : ''}
+                    ${Math.round(temp)}&deg;${precip != null ? " · " + precip + "% rain" : ""}
                 </div>
             </div>
         `;
@@ -442,36 +518,84 @@ function setupComparison() {
     });
 }
 
-function setupFavoriteToggle() {
-    const btn = document.getElementById("add-favorite-btn");
-    if (!btn) return;
+// -------- Favorite toggle behavior --------
 
-    btn.addEventListener("click", () => {
-        if (!window.currentLocationData) return;
+async function toggleFavoriteForCurrentLocation() {
+    if (!window.currentLocationData) return;
 
+    const token = getAuthToken();
+    const loc = window.currentLocationData;
+
+    if (token) {
+        // Logged-in: update favorites on the server
+        try {
+            const res = await fetch(API_BASE + "/api/user/favorites/toggle", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + token
+                },
+                body: JSON.stringify({
+                    locationName: loc.display_name,
+                    latitude: Number(loc.lat),
+                    longitude: Number(loc.lon),
+                    timezone: loc.timezone || "auto"
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                console.error("Failed to toggle favorite:", data.error || res.statusText);
+                return;
+            }
+
+            const serverFavorites = (data.favorites || []).map(f => ({
+                display_name: f.name,
+                lat: String(f.latitude),
+                lon: String(f.longitude),
+                timezone: f.timezone || "auto"
+            }));
+            favorites = serverFavorites;
+            renderFavorites();
+            updateFavoriteToggle();
+        } catch (e) {
+            console.error("Network error toggling favorite:", e);
+        }
+    } else {
+        // Not logged in → fall back to local favorites
         const existingIndex = favorites.findIndex(
-            f => f.display_name === window.currentLocationData.display_name
+            f => f.display_name === loc.display_name
         );
 
         if (existingIndex >= 0) {
             favorites.splice(existingIndex, 1);
         } else {
             favorites.push({
-                display_name: window.currentLocationData.display_name,
-                lat: window.currentLocationData.lat,
-                lon: window.currentLocationData.lon
+                display_name: loc.display_name,
+                lat: loc.lat,
+                lon: loc.lon
             });
         }
 
-        saveFavorites();
+        saveFavoritesLocal();
         renderFavorites();
         updateFavoriteToggle();
+    }
+}
+
+function setupFavoriteToggle() {
+    const btn = document.getElementById("add-favorite-btn");
+    if (!btn) return;
+
+    btn.addEventListener("click", () => {
+        toggleFavoriteForCurrentLocation();
     });
 }
 
+// -------- Init --------
+
 window.addEventListener("DOMContentLoaded", () => {
     setCurrentDate();
-    loadFavorites();
+    loadFavoritesLocal();
     setupTabs();
     setupLocationSearch();
     renderFavorites();
