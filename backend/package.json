@@ -16,9 +16,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.5.0"
   },
-  {
   "scripts": {
     "start": "node server.js",
     "seed-demo": "node scripts/seed-demo-feedback.js"
   }
-}
