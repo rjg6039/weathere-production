@@ -1,11 +1,11 @@
 // feedback.js
 // Handles user auth, feedback submission, fetching stats and AI summaries,
-// and exposes auth state so weather-core.js can sync account favorites.
+// and exposes refreshFeedbackFromServer for weather-core to call.
 
 (function () {
-    const API_BASE_LOCAL = window.WEATHERE_API_BASE_URL || "http://localhost:4000";
+    var API_BASE_LOCAL = window.WEATHERE_API_BASE_URL || "http://localhost:4000";
 
-    let currentUser = {
+    var currentUser = {
         id: null,
         displayName: null,
         email: null,
@@ -22,9 +22,9 @@
 
     function loadUserFromStorage() {
         try {
-            const raw = localStorage.getItem("weathere_user");
+            var raw = localStorage.getItem("weathere_user");
             if (!raw) return;
-            const parsed = JSON.parse(raw);
+            var parsed = JSON.parse(raw);
             if (parsed && parsed.id && parsed.token) {
                 currentUser = parsed;
             }
@@ -34,9 +34,9 @@
     }
 
     function updateAuthUI() {
-        const authBtn = document.getElementById("auth-button");
-        const authPanel = document.getElementById("auth-panel");
-        const authMsg = document.getElementById("auth-message");
+        var authBtn = document.getElementById("auth-button");
+        var authPanel = document.getElementById("auth-panel");
+        var authMsg = document.getElementById("auth-message");
         if (!authBtn || !authPanel) return;
 
         if (currentUser && currentUser.id) {
@@ -56,20 +56,20 @@
     }
 
     function toggleAuthPanel() {
-        const panel = document.getElementById("auth-panel");
+        var panel = document.getElementById("auth-panel");
         if (!panel) return;
         panel.classList.toggle("visible");
     }
 
     async function registerUser() {
-        const emailEl = document.getElementById("auth-email");
-        const passEl = document.getElementById("auth-password");
-        const nameEl = document.getElementById("auth-displayName");
-        const msg = document.getElementById("auth-message");
+        var emailEl = document.getElementById("auth-email");
+        var passEl = document.getElementById("auth-password");
+        var nameEl = document.getElementById("auth-displayName");
+        var msg = document.getElementById("auth-message");
 
-        const email = emailEl.value.trim();
-        const password = passEl.value;
-        const displayName = nameEl.value.trim();
+        var email = emailEl.value.trim();
+        var password = passEl.value;
+        var displayName = nameEl.value.trim();
 
         if (!email || !password || !displayName) {
             msg.textContent = "Please fill in email, password, and display name.";
@@ -78,13 +78,13 @@
         }
 
         try {
-            const res = await fetch(API_BASE_LOCAL + "/api/auth/register", {
+            var res = await fetch(API_BASE_LOCAL + "/api/auth/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password, displayName })
+                body: JSON.stringify({ email: email, password: password, displayName: displayName })
             });
 
-            const data = await res.json();
+            var data = await res.json();
 
             if (!res.ok) {
                 msg.textContent = data.error || "Registration failed.";
@@ -103,16 +103,13 @@
             msg.style.color = "#27ae60";
             updateAuthUI();
 
-            // Expose auth state globally
+            // Minimal global auth state for anything else that cares
             window.weathereAuth = {
                 isLoggedIn: true,
                 token: currentUser.token,
                 displayName: currentUser.displayName,
                 email: currentUser.email
             };
-            if (typeof window.syncFavoritesFromAccount === "function") {
-                window.syncFavoritesFromAccount();
-            }
         } catch (e) {
             console.error(e);
             msg.textContent = "Network error during registration.";
@@ -121,12 +118,12 @@
     }
 
     async function loginUser() {
-        const emailEl = document.getElementById("auth-email");
-        const passEl = document.getElementById("auth-password");
-        const msg = document.getElementById("auth-message");
+        var emailEl = document.getElementById("auth-email");
+        var passEl = document.getElementById("auth-password");
+        var msg = document.getElementById("auth-message");
 
-        const email = emailEl.value.trim();
-        const password = passEl.value;
+        var email = emailEl.value.trim();
+        var password = passEl.value;
 
         if (!email || !password) {
             msg.textContent = "Please enter email and password.";
@@ -135,13 +132,13 @@
         }
 
         try {
-            const res = await fetch(API_BASE_LOCAL + "/api/auth/login", {
+            var res = await fetch(API_BASE_LOCAL + "/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password })
+                body: JSON.stringify({ email: email, password: password })
             });
 
-            const data = await res.json();
+            var data = await res.json();
 
             if (!res.ok) {
                 msg.textContent = data.error || "Login failed.";
@@ -160,16 +157,12 @@
             msg.style.color = "#27ae60";
             updateAuthUI();
 
-            // Expose auth state globally
             window.weathereAuth = {
                 isLoggedIn: true,
                 token: currentUser.token,
                 displayName: currentUser.displayName,
                 email: currentUser.email
             };
-            if (typeof window.syncFavoritesFromAccount === "function") {
-                window.syncFavoritesFromAccount();
-            }
         } catch (e) {
             console.error(e);
             msg.textContent = "Network error during login.";
@@ -178,7 +171,7 @@
     }
 
     function getAuthHeaders() {
-        const headers = { "Content-Type": "application/json" };
+        var headers = { "Content-Type": "application/json" };
         if (currentUser && currentUser.token) {
             headers["Authorization"] = "Bearer " + currentUser.token;
         }
@@ -198,32 +191,32 @@
             return;
         }
 
-        const rating = isLike ? "like" : "dislike";
-        const textarea = document.getElementById("feedback-text");
-        const commentText = textarea ? textarea.value.trim() : "";
-        const loc = window.currentLocationData;
+        var rating = isLike ? "like" : "dislike";
+        var textarea = document.getElementById("feedback-text");
+        var commentText = textarea ? textarea.value.trim() : "";
+        var loc = window.currentLocationData;
         if (!loc) {
             alert("Location not ready yet.");
             return;
         }
 
-        const body = {
+        var body = {
             locationName: loc.display_name,
             latitude: Number(loc.lat),
             longitude: Number(loc.lon),
             timezone: "auto",
             forecastTime: getCurrentForecastTime(),
-            rating,
-            commentText
+            rating: rating,
+            commentText: commentText
         };
 
         try {
-            const res = await fetch(API_BASE_LOCAL + "/api/feedback", {
+            var res = await fetch(API_BASE_LOCAL + "/api/feedback", {
                 method: "POST",
                 headers: getAuthHeaders(),
                 body: JSON.stringify(body)
             });
-            const data = await res.json().catch(() => ({}));
+            var data = await res.json().catch(function () { return {}; });
 
             if (res.status === 409) {
                 alert("You’ve already submitted feedback for this forecast hour at this location.");
@@ -243,23 +236,23 @@
     }
 
     async function refreshFeedbackFromServer() {
-        const loc = window.currentLocationData;
+        var loc = window.currentLocationData;
         if (!loc || !window.currentWeatherData || !window.currentWeatherData.current_weather) {
             return;
         }
-        const forecastTime = getCurrentForecastTime();
+        var forecastTime = getCurrentForecastTime();
 
-        const url = new URL(API_BASE_LOCAL + "/api/feedback/summary");
+        var url = new URL(API_BASE_LOCAL + "/api/feedback/summary");
         url.searchParams.set("locationName", loc.display_name);
         url.searchParams.set("forecastTime", forecastTime);
 
         try {
-            const res = await fetch(url.toString());
+            var res = await fetch(url.toString());
             if (!res.ok) {
                 console.error("Failed to fetch feedback summary:", res.status);
                 return;
             }
-            const data = await res.json();
+            var data = await res.json();
             renderFeedbackFromServer(data);
         } catch (e) {
             console.error("Error fetching feedback summary:", e);
@@ -267,37 +260,37 @@
     }
 
     function renderFeedbackFromServer(data) {
-        const likesEl = document.getElementById("likes-count");
-        const dislikesEl = document.getElementById("dislikes-count");
-        const accEl = document.getElementById("accuracy-percent");
-        const commentsList = document.getElementById("comments-list");
-        const aiSummaryEl = document.getElementById("ai-summary");
+        var likesEl = document.getElementById("likes-count");
+        var dislikesEl = document.getElementById("dislikes-count");
+        var accEl = document.getElementById("accuracy-percent");
+        var commentsList = document.getElementById("comments-list");
+        var aiSummaryEl = document.getElementById("ai-summary");
 
         if (!likesEl || !dislikesEl || !accEl || !commentsList || !aiSummaryEl) return;
 
-        const stats = data.stats || { likes: 0, dislikes: 0, totalFeedback: 0, uniqueUsers: 0 };
+        var stats = data.stats || { likes: 0, dislikes: 0, totalFeedback: 0, uniqueUsers: 0 };
         likesEl.textContent = stats.likes || 0;
         dislikesEl.textContent = stats.dislikes || 0;
 
-        const total = (stats.likes || 0) + (stats.dislikes || 0);
+        var total = (stats.likes || 0) + (stats.dislikes || 0);
         if (total === 0) {
             accEl.textContent = "–";
         } else {
-            const percent = Math.round((stats.likes / total) * 100);
+            var percent = Math.round((stats.likes / total) * 100);
             accEl.textContent = percent + "%";
         }
 
         commentsList.innerHTML = "";
-        const comments = data.comments || [];
+        var comments = data.comments || [];
         if (!comments.length) {
             commentsList.innerHTML =
-                `<div style="font-size:12px;color:#777;">No comments yet. Be the first to share how the forecast matches real conditions.</div>`;
+                '<div style="font-size:12px;color:#777;">No comments yet. Be the first to share how the forecast matches real conditions.</div>';
         } else {
-            comments.forEach(c => {
-                const div = document.createElement("div");
+            comments.forEach(function (c) {
+                var div = document.createElement("div");
                 div.className = "comment";
-                const date = new Date(c.createdAt || Date.now());
-                const dateStr = date.toLocaleString(undefined, {
+                var date = new Date(c.createdAt || Date.now());
+                var dateStr = date.toLocaleString(undefined, {
                     month: "short",
                     day: "numeric",
                     hour: "2-digit",
@@ -323,20 +316,20 @@
     }
 
     function registerFeedbackHandlers() {
-        const likeBtn = document.getElementById("like-btn");
-        const dislikeBtn = document.getElementById("dislike-btn");
-        const authBtn = document.getElementById("auth-button");
-        const loginBtn = document.getElementById("auth-login-btn");
-        const registerBtn = document.getElementById("auth-register-btn");
+        var likeBtn = document.getElementById("like-btn");
+        var dislikeBtn = document.getElementById("dislike-btn");
+        var authBtn = document.getElementById("auth-button");
+        var loginBtn = document.getElementById("auth-login-btn");
+        var registerBtn = document.getElementById("auth-register-btn");
 
         if (authBtn) {
             authBtn.addEventListener("click", toggleAuthPanel);
         }
         if (likeBtn) {
-            likeBtn.addEventListener("click", () => submitFeedback(true));
+            likeBtn.addEventListener("click", function () { submitFeedback(true); });
         }
         if (dislikeBtn) {
-            dislikeBtn.addEventListener("click", () => submitFeedback(false));
+            dislikeBtn.addEventListener("click", function () { submitFeedback(false); });
         }
         if (loginBtn) {
             loginBtn.addEventListener("click", loginUser);
@@ -351,23 +344,17 @@
 
     // -------- Init --------
 
-    window.addEventListener("DOMContentLoaded", () => {
+    window.addEventListener("DOMContentLoaded", function () {
         loadUserFromStorage();
 
-        // Expose auth state globally at startup
         window.weathereAuth = {
             isLoggedIn: !!(currentUser && currentUser.id && currentUser.token),
-            token: currentUser?.token || null,
-            displayName: currentUser?.displayName || null,
-            email: currentUser?.email || null
+            token: currentUser ? currentUser.token : null,
+            displayName: currentUser ? currentUser.displayName : null,
+            email: currentUser ? currentUser.email : null
         };
 
         updateAuthUI();
         registerFeedbackHandlers();
-
-        // If logged in, sync favorites from account
-        if (window.weathereAuth.isLoggedIn && typeof window.syncFavoritesFromAccount === "function") {
-            window.syncFavoritesFromAccount();
-        }
     });
 })();
