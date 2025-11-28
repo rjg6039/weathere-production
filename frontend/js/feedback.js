@@ -1,12 +1,9 @@
-// frontend/js/feedback.js
+// frontend/js/feedback.js (CORRECTED VERSION)
 
 // Backend base URL (Render)
 const API_BASE =
-  window.WEATHERE_API_BASE ||
-  "https://weathere-backend.onrender.com"; // change if your backend URL differs
-
-// For local dev you could override, but in production this will be the Render backend
-const API_BASE_LOCAL = API_BASE;
+  window.WEATHERE_API_BASE_URL ||
+  "https://weathere-backend.onrender.com";
 
 let currentUser = null;
 
@@ -42,110 +39,84 @@ function loadAuthFromStorage() {
   if (token && rawUser) {
     try {
       currentUser = JSON.parse(rawUser);
+      updateAuthUI();
     } catch {
       currentUser = null;
     }
   }
-  updateAuthUI();
 }
 
-// Fetch current user from backend (to verify token still valid)
-async function fetchCurrentUser() {
-  const token = getAuthToken();
-  if (!token) return null;
-
-  try {
-    const res = await fetch(`${API_BASE_LOCAL}/api/auth/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-    if (!res.ok) {
-      if (res.status === 401) {
-        clearAuth();
-      }
-      return null;
-    }
-    const data = await res.json();
-    currentUser = data.user || null;
-    if (currentUser) {
-      localStorage.setItem("weathere_user", JSON.stringify(currentUser));
-    }
-    updateAuthUI();
-    return currentUser;
-  } catch (err) {
-    console.error("Error fetching current user:", err);
-    return null;
-  }
-}
-
-// Update sign-in / user UI state
+// Update sign-in / user UI state - CORRECTED FOR YOUR HTML
 function updateAuthUI() {
-  const signInBtn = document.getElementById("signinButton");
-  const userInfoEl = document.getElementById("user-info");
-  const logoutBtn = document.getElementById("logoutButton");
+  const authButton = document.getElementById("auth-button");
+  const authPanel = document.getElementById("auth-panel");
 
-  if (!signInBtn || !userInfoEl || !logoutBtn) {
-    return;
-  }
+  if (!authButton) return;
 
   if (currentUser) {
-    signInBtn.style.display = "none";
-    logoutBtn.style.display = "inline-flex";
-    userInfoEl.textContent = currentUser.displayName || currentUser.email || "Signed in";
+    authButton.innerHTML = `<i class="fas fa-user"></i> ${currentUser.displayName} (Sign out)`;
+    // Enable feedback features
+    document.getElementById("like-btn").disabled = false;
+    document.getElementById("dislike-btn").disabled = false;
+    document.getElementById("feedback-text").disabled = false;
   } else {
-    signInBtn.style.display = "inline-flex";
-    logoutBtn.style.display = "none";
-    userInfoEl.textContent = "Not signed in";
-  }
-
-  // Also disable feedback form if not logged in
-  const feedbackForm = document.getElementById("feedback-form");
-  const feedbackGuard = document.getElementById("feedback-login-guard");
-  if (feedbackForm && feedbackGuard) {
-    if (currentUser) {
-      feedbackForm.style.display = "block";
-      feedbackGuard.style.display = "none";
-    } else {
-      feedbackForm.style.display = "none";
-      feedbackGuard.style.display = "block";
-    }
+    authButton.innerHTML = '<i class="fas fa-user"></i> Sign in';
+    // Disable feedback features
+    document.getElementById("like-btn").disabled = true;
+    document.getElementById("dislike-btn").disabled = true;
+    document.getElementById("feedback-text").disabled = true;
   }
 }
 
-// Sign-in and registration helpers (assuming you have modals with these IDs)
+// Sign-in and registration helpers - CORRECTED FOR YOUR HTML
 function setupAuthHandlers() {
-  const signInBtn = document.getElementById("signinButton");
-  const logoutBtn = document.getElementById("logoutButton");
+  const authButton = document.getElementById("auth-button");
+  const authPanel = document.getElementById("auth-panel");
+  const authLoginBtn = document.getElementById("auth-login-btn");
+  const authRegisterBtn = document.getElementById("auth-register-btn");
+  const authEmail = document.getElementById("auth-email");
+  const authPassword = document.getElementById("auth-password");
+  const authDisplayName = document.getElementById("auth-displayName");
+  const authMessage = document.getElementById("auth-message");
 
-  const loginModal = document.getElementById("loginModal");
-  const loginForm = document.getElementById("loginForm");
-  const registerForm = document.getElementById("registerForm");
-  const loginError = document.getElementById("loginError");
-  const registerError = document.getElementById("registerError");
+  if (!authButton || !authPanel) return;
 
-  if (signInBtn && loginModal) {
-    signInBtn.addEventListener("click", () => {
-      loginModal.style.display = "flex";
-    });
-  }
-
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
+  // Main sign-in button toggle
+  authButton.addEventListener("click", () => {
+    if (currentUser) {
+      // If user is logged in, log them out
       clearAuth();
-    });
-  }
+      if (authMessage) authMessage.textContent = "Logged out successfully";
+    } else {
+      // Toggle auth panel visibility
+      authPanel.classList.toggle("visible");
+      
+      if (authPanel.classList.contains("visible")) {
+        authButton.innerHTML = '<i class="fas fa-times"></i> Cancel';
+      } else {
+        authButton.innerHTML = '<i class="fas fa-user"></i> Sign in';
+        clearAuthForm();
+        if (authMessage) authMessage.textContent = '';
+      }
+    }
+  });
 
-  if (loginForm) {
-    loginForm.addEventListener("submit", async (e) => {
+  // Login functionality
+  if (authLoginBtn) {
+    authLoginBtn.addEventListener("click", async (e) => {
       e.preventDefault();
-      if (loginError) loginError.textContent = "";
+      if (authMessage) authMessage.textContent = "";
 
-      const email = loginForm.querySelector("input[name='email']").value.trim();
-      const password = loginForm.querySelector("input[name='password']").value;
+      const email = authEmail.value.trim();
+      const password = authPassword.value.trim();
+
+      if (!email || !password) {
+        if (authMessage) authMessage.textContent = "Please enter both email and password";
+        return;
+      }
 
       try {
-        const res = await fetch(`${API_BASE_LOCAL}/api/auth/login`, {
+        const res = await fetch(`${API_BASE}/api/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password })
@@ -153,31 +124,47 @@ function setupAuthHandlers() {
 
         const data = await res.json();
         if (!res.ok) {
-          if (loginError) loginError.textContent = data.error || "Login failed.";
+          if (authMessage) authMessage.textContent = data.error || "Login failed.";
           return;
         }
 
         setAuth(data.token, data.user);
-        if (loginModal) loginModal.style.display = "none";
-        refreshFeedbackFromServer();
+        authPanel.classList.remove("visible");
+        authButton.innerHTML = `<i class="fas fa-user"></i> ${data.user.displayName} (Sign out)`;
+        if (authMessage) authMessage.textContent = "Login successful!";
+        clearAuthForm();
+        if (typeof window.refreshFeedbackFromServer === "function") {
+          window.refreshFeedbackFromServer();
+        }
       } catch (err) {
         console.error("Login error:", err);
-        if (loginError) loginError.textContent = "Network error during login.";
+        if (authMessage) authMessage.textContent = "Network error during login.";
       }
     });
   }
 
-  if (registerForm) {
-    registerForm.addEventListener("submit", async (e) => {
+  // Register functionality
+  if (authRegisterBtn) {
+    authRegisterBtn.addEventListener("click", async (e) => {
       e.preventDefault();
-      if (registerError) registerError.textContent = "";
+      if (authMessage) authMessage.textContent = "";
 
-      const displayName = registerForm.querySelector("input[name='displayName']").value.trim();
-      const email = registerForm.querySelector("input[name='email']").value.trim();
-      const password = registerForm.querySelector("input[name='password']").value;
+      const email = authEmail.value.trim();
+      const password = authPassword.value.trim();
+      const displayName = authDisplayName.value.trim();
+
+      if (!email || !password || !displayName) {
+        if (authMessage) authMessage.textContent = "Please fill in all fields";
+        return;
+      }
+
+      if (password.length < 6) {
+        if (authMessage) authMessage.textContent = "Password must be at least 6 characters";
+        return;
+      }
 
       try {
-        const res = await fetch(`${API_BASE_LOCAL}/api/auth/register`, {
+        const res = await fetch(`${API_BASE}/api/auth/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ displayName, email, password })
@@ -185,153 +172,38 @@ function setupAuthHandlers() {
 
         const data = await res.json();
         if (!res.ok) {
-          if (registerError) registerError.textContent = data.error || "Registration failed.";
+          if (authMessage) authMessage.textContent = data.error || "Registration failed.";
           return;
         }
 
         setAuth(data.token, data.user);
-        if (loginModal) loginModal.style.display = "none";
-        refreshFeedbackFromServer();
+        authPanel.classList.remove("visible");
+        authButton.innerHTML = `<i class="fas fa-user"></i> ${data.user.displayName} (Sign out)`;
+        if (authMessage) authMessage.textContent = "Registration successful!";
+        clearAuthForm();
+        if (typeof window.refreshFeedbackFromServer === "function") {
+          window.refreshFeedbackFromServer();
+        }
       } catch (err) {
         console.error("Registration error:", err);
-        if (registerError) registerError.textContent = "Network error during registration.";
+        if (authMessage) authMessage.textContent = "Network error during registration.";
       }
     });
   }
 
-  // Close modal when clicking background
-  if (loginModal) {
-    loginModal.addEventListener("click", (e) => {
-      if (e.target === loginModal) {
-        loginModal.style.display = "none";
-      }
-    });
+  function clearAuthForm() {
+    if (authEmail) authEmail.value = '';
+    if (authPassword) authPassword.value = '';
+    if (authDisplayName) authDisplayName.value = '';
   }
 }
 
-// Return how far back we query comments
-function getTimeRangeHours() {
-  return 24; // last 24 hours
-}
-
-// Fetch feedback summary from backend for current location
-async function refreshFeedbackFromServer() {
-  const loc = window.currentLocationData;
-  if (!loc) {
-    return;
-  }
-
-  // locationName must match what backend stores, e.g. "San Francisco, CA, USA"
-  const locationName = loc.display_name || loc.name || "San Francisco, CA, USA";
-
-  const url = new URL(`${API_BASE_LOCAL}/api/feedback/summary`);
-  url.searchParams.set("locationName", locationName);
-  url.searchParams.set("timeRangeHours", String(getTimeRangeHours()));
-
-  try {
-    const res = await fetch(url.toString());
-    if (!res.ok) {
-      console.error("Failed to fetch feedback summary:", res.status);
-      return;
-    }
-    const data = await res.json();
-    renderFeedbackFromServer(data);
-  } catch (e) {
-    console.error("Error fetching feedback summary:", e);
-  }
-}
-
-// Render feedback summary + comments into the UI
-function renderFeedbackFromServer(data) {
-  const likesEl = document.getElementById("feedback-likes-count");
-  const dislikesEl = document.getElementById("feedback-dislikes-count");
-  const totalEl = document.getElementById("feedback-total-count");
-  const summaryEl = document.getElementById("feedback-ai-summary");
-  const commentsList = document.getElementById("feedback-comments-list");
-  const statusEl = document.getElementById("feedback-status");
-
-  const stats = data?.stats || {};
-  const commentsRaw = data?.comments || [];
-  let comments = commentsRaw.slice().sort((a, b) => {
-    const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return db - da; // newest first
-  });
-
-  if (likesEl) likesEl.textContent = stats.likes ?? 0;
-  if (dislikesEl) dislikesEl.textContent = stats.dislikes ?? 0;
-  if (totalEl) totalEl.textContent = stats.totalFeedback ?? 0;
-
-  if (statusEl) {
-    if (stats.totalFeedback > 0) {
-      statusEl.textContent = `Based on ${stats.totalFeedback} feedback entries in the last ${getTimeRangeHours()} hours.`;
-    } else {
-      statusEl.textContent = `No feedback yet in the last ${getTimeRangeHours()} hours.`;
-    }
-  }
-
-  if (summaryEl) {
-    if (data.aiSummary) {
-      summaryEl.textContent = data.aiSummary;
-    } else if (stats.totalFeedback > 0) {
-      summaryEl.textContent =
-        "Collecting more feedback to generate a stronger sentiment summary for this location.";
-    } else {
-      summaryEl.textContent =
-        "No feedback has been submitted for this location yet. Once people start reporting how accurate the forecast feels, an AI summary will appear here.";
-    }
-  }
-
-  if (!commentsList) return;
-
-  commentsList.innerHTML = "";
-
-  if (!comments.length) {
-    commentsList.innerHTML =
-      '<div style="font-size:12px;color:#777;">No comments yet in the last 24 hours. Be the first to share how the forecast matches real conditions.</div>';
-  } else {
-    comments.forEach((c) => {
-      const div = document.createElement("div");
-      div.className = "comment";
-
-      const date = new Date(c.createdAt || Date.now());
-      const dateStr = date.toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-
-      const label =
-        c.rating === "like"
-          ? '<span class="badge badge-like">Accurate</span>'
-          : c.rating === "dislike"
-          ? '<span class="badge badge-dislike">Inaccurate</span>'
-          : "";
-
-      div.innerHTML = `
-        <div class="comment-header">
-          <div class="comment-author">${c.userDisplayName || "User"}</div>
-          <div class="comment-meta">
-            ${label}
-            <span class="comment-date">${dateStr}</span>
-          </div>
-        </div>
-        <div class="comment-content">${c.commentText || ""}</div>
-      `;
-
-      commentsList.appendChild(div);
-    });
-  }
-}
-
-// Submit new feedback (like/dislike + optional comment)
+// Submit feedback - CORRECTED FOR YOUR HTML
 function setupFeedbackForm() {
-  const likeBtn = document.getElementById("feedback-like-button");
-  const dislikeBtn = document.getElementById("feedback-dislike-button");
-  const commentInput = document.getElementById("feedback-comment-input");
-  const submitBtn = document.getElementById("feedback-submit-button");
-  const noticeEl = document.getElementById("feedback-submit-notice");
+  const likeBtn = document.getElementById("like-btn");
+  const dislikeBtn = document.getElementById("dislike-btn");
+  const feedbackText = document.getElementById("feedback-text");
+  const authMessage = document.getElementById("auth-message");
 
   let selectedRating = null;
 
@@ -351,86 +223,153 @@ function setupFeedbackForm() {
     });
   }
 
-  if (submitBtn) {
-    submitBtn.addEventListener("click", async () => {
-      const token = getAuthToken();
-      if (!token) {
-        if (noticeEl) {
-          noticeEl.textContent = "Please sign in to submit feedback.";
-          noticeEl.style.color = "#d33";
-        }
-        return;
-      }
+  // Feedback submission (when clicking like/dislike buttons)
+  function submitFeedback(rating) {
+    if (!currentUser) {
+      if (authMessage) authMessage.textContent = "Please sign in to submit feedback";
+      return;
+    }
 
-      const loc = window.currentLocationData;
-      const wx = window.currentWeatherData;
-      if (!loc || !wx || !wx.current_weather) {
-        if (noticeEl) {
-          noticeEl.textContent = "Weather data not loaded yet.";
-          noticeEl.style.color = "#d33";
-        }
-        return;
-      }
+    const commentText = feedbackText ? feedbackText.value.trim() : '';
+    const token = getAuthToken();
+    
+    // Get current location and time
+    const currentLocation = document.getElementById("current-location").textContent;
+    const currentTime = new Date().toISOString();
 
-      if (!selectedRating) {
-        if (noticeEl) {
-          noticeEl.textContent = "Please select whether the forecast feels accurate or inaccurate.";
-          noticeEl.style.color = "#d33";
-        }
-        return;
-      }
-
-      const commentText = (commentInput?.value || "").trim();
-
-      try {
-        const body = {
-          locationName: loc.display_name || loc.name || "San Francisco, CA, USA",
-          latitude: loc.lat,
-          longitude: loc.lon,
-          timezone: wx.timezone || "America/Los_Angeles",
-          rating: selectedRating,
-          commentText
-        };
-
-        const res = await fetch(`${API_BASE_LOCAL}/api/feedback`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify(body)
-        });
-
-        const data = await res.json();
-        if (!res.ok) {
-          console.error("Feedback submit failed:", data);
-          if (noticeEl) {
-            noticeEl.textContent = data.error || "Failed to submit feedback.";
-            noticeEl.style.color = "#d33";
-          }
+    try {
+      fetch(`${API_BASE}/api/feedback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          locationName: currentLocation,
+          forecastTime: currentTime,
+          rating: rating,
+          commentText: commentText
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (!response.ok) {
+          if (authMessage) authMessage.textContent = data.error || "Failed to submit feedback.";
           return;
         }
 
-        if (commentInput) commentInput.value = "";
+        if (feedbackText) feedbackText.value = '';
         if (likeBtn) likeBtn.classList.remove("active");
         if (dislikeBtn) dislikeBtn.classList.remove("active");
         selectedRating = null;
 
-        if (noticeEl) {
-          noticeEl.textContent = "Thanks for your feedback!";
-          noticeEl.style.color = "#0a8";
+        if (authMessage) authMessage.textContent = "Thanks for your feedback!";
+        
+        // Refresh feedback stats
+        if (typeof window.refreshFeedbackFromServer === "function") {
+          window.refreshFeedbackFromServer();
         }
+      })
+      .catch(err => {
+        console.error("Feedback submission error:", err);
+        if (authMessage) authMessage.textContent = "Network error while submitting feedback.";
+      });
+    } catch (err) {
+      console.error("Error submitting feedback:", err);
+    }
+  }
 
-        // Refresh from server so new comment appears
-        refreshFeedbackFromServer();
-      } catch (err) {
-        console.error("Error submitting feedback:", err);
-        if (noticeEl) {
-          noticeEl.textContent = "Network error while submitting feedback.";
-          noticeEl.style.color = "#d33";
-        }
-      }
-    });
+  // Attach submission to buttons
+  if (likeBtn) {
+    likeBtn.addEventListener("click", () => submitFeedback("like"));
+  }
+  if (dislikeBtn) {
+    dislikeBtn.addEventListener("click", () => submitFeedback("dislike"));
+  }
+}
+
+// Return how far back we query comments
+function getTimeRangeHours() {
+  return 24; // last 24 hours
+}
+
+// Fetch feedback summary from backend for current location
+async function refreshFeedbackFromServer() {
+  if (!window.currentLocationData) return;
+
+  const locationName = window.currentLocationData.display_name || "San Francisco, CA, USA";
+  const forecastTime = new Date().toISOString();
+
+  try {
+    const url = new URL(`${API_BASE}/api/feedback/summary`);
+    url.searchParams.set("locationName", locationName);
+    url.searchParams.set("forecastTime", forecastTime);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return;
+    const data = await res.json();
+    renderFeedbackFromServer(data);
+  } catch (e) {
+    console.error("Error fetching feedback summary:", e);
+  }
+}
+
+// Render feedback summary + comments into the UI - CORRECTED FOR YOUR HTML
+function renderFeedbackFromServer(data) {
+  const likesEl = document.getElementById("likes-count");
+  const dislikesEl = document.getElementById("dislikes-count");
+  const summaryEl = document.getElementById("ai-summary");
+  const commentsList = document.getElementById("comments-list");
+
+  const stats = data?.stats || {};
+  const commentsRaw = data?.comments || [];
+  let comments = commentsRaw.slice().sort((a, b) => {
+    const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return db - da; // newest first
+  });
+
+  if (likesEl) likesEl.textContent = stats.likes ?? 0;
+  if (dislikesEl) dislikesEl.textContent = stats.dislikes ?? 0;
+
+  if (summaryEl) {
+    if (data.aiSummary) {
+      summaryEl.textContent = data.aiSummary;
+    } else if (stats.totalFeedback > 0) {
+      summaryEl.textContent = "Collecting more feedback to generate a stronger sentiment summary.";
+    } else {
+      summaryEl.textContent = "No feedback has been submitted for this location yet.";
+    }
+  }
+
+  if (commentsList) {
+    commentsList.innerHTML = "";
+    if (!comments.length) {
+      commentsList.innerHTML = '<div style="font-size:12px;color:#777;">No comments yet.</div>';
+    } else {
+      comments.forEach((c) => {
+        const div = document.createElement("div");
+        div.className = "comment";
+
+        const date = new Date(c.createdAt || Date.now());
+        const dateStr = date.toLocaleString(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+
+        div.innerHTML = `
+          <div class="comment-header">
+            <div class="comment-author">${c.userDisplayName || "User"}</div>
+            <div class="comment-date">${dateStr}</div>
+          </div>
+          <div class="comment-content">${c.commentText || ""}</div>
+        `;
+
+        commentsList.appendChild(div);
+      });
+    }
   }
 }
 
@@ -440,9 +379,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupAuthHandlers();
   setupFeedbackForm();
 
-  // Once location/weather are ready, your weather core should call:
-  //   refreshFeedbackFromServer();
-  // If you want to force an initial attempt after a delay:
+  // Set up feedback refresh when location changes
+  window.refreshFeedbackFromServer = refreshFeedbackFromServer;
+
+  // Initial refresh after a delay
   setTimeout(() => {
     refreshFeedbackFromServer();
   }, 2000);
